@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wicketkeeper — Squad & Ledger</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --pitch:#0B3D2E;
+    --pitch-dark:#082B20;
+    --crease:#F6F3EB;
+    --gold:#C9971F;
+    --gold-dark:#A87A12;
+    --navy:#12283F;
+    --ball-red:#9C2B2B;
+  }
+  *{font-family:'Inter',sans-serif;}
+  .font-display{font-family:'Oswald',sans-serif;}
+  .font-mono{font-family:'IBM Plex Mono',monospace;}
+  body{background:var(--crease);}
+  .bg-pitch{background:var(--pitch);}
+  .bg-pitch-dark{background:var(--pitch-dark);}
+  .bg-navy{background:var(--navy);}
+  .text-pitch{color:var(--pitch);}
+  .text-gold{color:var(--gold);}
+  .bg-gold{background:var(--gold);}
+  .bg-gold-dark{background:var(--gold-dark);}
+  .border-gold{border-color:var(--gold);}
+  .tab-active{border-bottom:3px solid var(--gold); color:var(--gold);}
+  .tab-inactive{border-bottom:3px solid transparent; color:#D9E4DD;}
+  .stitch{
+    background-image: repeating-linear-gradient(90deg, var(--gold) 0 6px, transparent 6px 12px);
+    height:2px;
+  }
+  .scrollbar-thin::-webkit-scrollbar{height:6px;width:6px;}
+  .scrollbar-thin::-webkit-scrollbar-thumb{background:#c9971f55;border-radius:4px;}
+  input:focus, select:focus, textarea:focus{outline:none; box-shadow:0 0 0 3px rgba(201,151,31,0.35); border-color:var(--gold);}
+  .card{background:#fff; border:1px solid #E5E1D6; border-radius:14px;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
+  .fade-in{animation:fadeIn .25s ease-out;}
+  @keyframes pulseDot{0%,100%{opacity:1;} 50%{opacity:.35;}}
+  .pulse{animation:pulseDot 1.4s ease-in-out infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .spinner{animation:spin 0.8s linear infinite;}
+  ::selection{background:#C9971F55;}
+  fieldset:disabled{opacity:.55;}
+</style>
+</head>
+<body class="min-h-screen text-slate-800">
+
+<!-- ============ SETUP BANNER (only shows if Apps Script URL isn't configured) ============ -->
+<div id="setupBanner" class="hidden bg-amber-100 border-b border-amber-300 text-amber-900 text-sm text-center px-4 py-2">
+  ⚠️ This app isn't connected to a Google Sheet yet. Open the code file and set <code class="font-mono">APPS_SCRIPT_URL</code> near the top of the <code class="font-mono">&lt;script&gt;</code> tag to your deployed Apps Script Web App URL.
+</div>
+
+<!-- ============ TOP NAV ============ -->
+<header class="bg-pitch sticky top-0 z-40 shadow-lg">
+  <div class="max-w-6xl mx-auto px-4">
+    <div class="flex items-center justify-between h-16">
+      <div class="flex items-center gap-2.5">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="#C9971F" stroke-width="1.6"/>
+          <path d="M4 8.5 Q12 12 20 8.5" stroke="#C9971F" stroke-width="1.3" fill="none"/>
+          <path d="M4 15.5 Q12 12 20 15.5" stroke="#C9971F" stroke-width="1.3" fill="none"/>
+        </svg>
+        <span class="font-display text-white text-xl tracking-wide">Wicketkeeper</span>
+      </div>
+      <nav id="mainNav" class="hidden md:flex items-center gap-6 font-display text-sm tracking-wide">
+        <button data-view="dashboard" class="nav-btn tab-inactive pb-1 pt-1">Dashboard</button>
+        <button data-view="squad" class="nav-btn tab-inactive pb-1 pt-1">Squad</button>
+        <button data-view="myreport" class="nav-btn tab-inactive pb-1 pt-1">My Ledger</button>
+        <button data-view="matches" class="nav-btn tab-inactive pb-1 pt-1">Matches</button>
+        <button data-view="admin" id="adminNavBtn" class="nav-btn tab-inactive pb-1 pt-1 hidden">Admin Panel</button>
+      </nav>
+      <div class="flex items-center gap-3">
+        <div id="connStatus" class="hidden sm:flex items-center gap-1.5 text-xs font-display text-slate-300" title="Sync status">
+          <span id="connDot" class="w-2 h-2 rounded-full bg-slate-400"></span>
+          <span id="connLabel">Connecting…</span>
+        </div>
+        <button id="manageTeamBtn" class="bg-gold hover:bg-gold-dark text-pitch-dark font-display text-sm px-4 py-2 rounded-full transition">Manage Team</button>
+        <button id="mobileMenuBtn" class="md:hidden text-white p-2">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+      </div>
+    </div>
+    <!-- mobile nav -->
+    <nav id="mobileNav" class="hidden md:hidden flex flex-col pb-3 font-display text-sm tracking-wide gap-1">
+      <button data-view="dashboard" class="nav-btn text-left text-slate-200 py-2 px-1">Dashboard</button>
+      <button data-view="squad" class="nav-btn text-left text-slate-200 py-2 px-1">Squad</button>
+      <button data-view="myreport" class="nav-btn text-left text-slate-200 py-2 px-1">My Ledger</button>
+      <button data-view="matches" class="nav-btn text-left text-slate-200 py-2 px-1">Matches</button>
+      <button data-view="admin" id="adminNavBtnMobile" class="nav-btn text-left text-slate-200 py-2 px-1 hidden">Admin Panel</button>
+      <div class="flex items-center gap-1.5 text-xs font-display text-slate-300 pt-1 px-1">
+        <span id="connDotMobile" class="w-2 h-2 rounded-full bg-slate-400"></span>
+        <span id="connLabelMobile">Connecting…</span>
+      </div>
+    </nav>
+  </div>
+  <div class="stitch"></div>
+</header>
+
+<!-- ============ INITIAL LOADING OVERLAY ============ -->
+<div id="loadingOverlay" class="fixed inset-0 bg-crease z-50 flex flex-col items-center justify-center gap-4" style="background:var(--crease);">
+  <svg class="spinner" width="40" height="40" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="9" stroke="#0B3D2E" stroke-width="2" opacity="0.2"/>
+    <path d="M12 3a9 9 0 0 1 9 9" stroke="#C9971F" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  <p class="font-display text-pitch">Fetching squad data from the sheet…</p>
+  <p id="loadingError" class="hidden text-sm text-[--ball-red] max-w-sm text-center px-4"></p>
+  <button id="loadingRetryBtn" class="hidden bg-pitch hover:bg-pitch-dark text-white font-display text-sm px-4 py-2 rounded-lg">Retry</button>
+</div>
+
+<!-- ============ MAIN CONTENT ============ -->
+<main class="max-w-6xl mx-auto px-4 py-6 pb-20">
+
+  <!-- ---------- DASHBOARD ---------- -->
+  <section id="view-dashboard" class="fade-in">
+    <div class="flex items-baseline justify-between mb-5">
+      <h1 class="font-display text-2xl text-pitch">Club Dashboard</h1>
+      <span id="todayTag" class="font-mono text-xs text-slate-500"></span>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div class="card p-5 relative overflow-hidden">
+        <div class="absolute right-3 top-3 opacity-10"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#0B3D2E" stroke-width="1.5"><path d="M12 2v20M5 9h14M6 15h12"/></svg></div>
+        <p class="text-xs font-display uppercase tracking-wider text-slate-500">Total Team Funds</p>
+        <p id="statTotalFunds" class="text-3xl font-display text-pitch mt-1">₹0</p>
+        <p class="text-xs text-slate-400 mt-1">Sum of all player credit balances</p>
+      </div>
+      <div class="card p-5 relative overflow-hidden">
+        <div class="absolute right-3 top-3 opacity-10"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#0B3D2E" stroke-width="1.5"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6M17 8a3 3 0 100-6M23 20c0-2.6-2-4.8-4.7-5.6"/></svg></div>
+        <p class="text-xs font-display uppercase tracking-wider text-slate-500">Active Players</p>
+        <p id="statPlayerCount" class="text-3xl font-display text-pitch mt-1">0</p>
+        <p class="text-xs text-slate-400 mt-1">Registered in the squad</p>
+      </div>
+      <div class="card p-5 relative overflow-hidden">
+        <div class="absolute right-3 top-3 opacity-10"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#9C2B2B" stroke-width="1.5"><path d="M12 2 2 22h20L12 2z"/></svg></div>
+        <p class="text-xs font-display uppercase tracking-wider text-slate-500">Players Owing Fees</p>
+        <p id="statLowBalance" class="text-3xl font-display text-[--ball-red] mt-1">0</p>
+        <p class="text-xs text-slate-400 mt-1">Balance below zero</p>
+      </div>
+    </div>
+
+    <div class="card p-5">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <h2 class="font-display text-lg text-pitch">Squad Balances</h2>
+        <input id="dashSearch" type="text" placeholder="Search player name…" class="border border-slate-200 rounded-lg px-3 py-2 text-sm w-full sm:w-64">
+      </div>
+      <div class="overflow-x-auto scrollbar-thin">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-slate-500 font-display uppercase text-xs tracking-wider border-b border-slate-200">
+              <th class="py-2 pr-3">Player</th>
+              <th class="py-2 pr-3">Contact</th>
+              <th class="py-2 pr-3">Balance</th>
+              <th class="py-2 pr-3">Status</th>
+            </tr>
+          </thead>
+          <tbody id="dashboardTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- SQUAD DIRECTORY ---------- -->
+  <section id="view-squad" class="hidden fade-in">
+    <div class="flex items-baseline justify-between mb-5">
+      <h1 class="font-display text-2xl text-pitch">Squad Directory</h1>
+      <span class="font-mono text-xs text-slate-500" id="squadCountTag"></span>
+    </div>
+    <div id="squadGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+  </section>
+
+  <!-- ---------- MY LEDGER / PLAYER REPORT ---------- -->
+  <section id="view-myreport" class="hidden fade-in">
+    <h1 class="font-display text-2xl text-pitch mb-5">My Ledger Report</h1>
+    <div class="card p-5 mb-5">
+      <label class="block text-xs font-display uppercase tracking-wider text-slate-500 mb-2">Select your name</label>
+      <select id="reportPlayerSelect" class="w-full sm:w-80 border border-slate-200 rounded-lg px-3 py-2 text-sm"></select>
+    </div>
+    <div id="reportSummary" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+      <div class="card p-4"><p class="text-xs font-display uppercase text-slate-500">Total Paid In</p><p id="repPaid" class="text-2xl font-display text-emerald-700 mt-1">₹0</p></div>
+      <div class="card p-4"><p class="text-xs font-display uppercase text-slate-500">Total Deducted</p><p id="repDeducted" class="text-2xl font-display text-[--ball-red] mt-1">₹0</p></div>
+      <div class="card p-4"><p class="text-xs font-display uppercase text-slate-500">Current Balance</p><p id="repBalance" class="text-2xl font-display text-pitch mt-1">₹0</p></div>
+    </div>
+    <div id="reportHistoryWrap" class="hidden card p-5">
+      <h2 class="font-display text-lg text-pitch mb-3">Transaction History</h2>
+      <div class="overflow-x-auto scrollbar-thin">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-slate-500 font-display uppercase text-xs tracking-wider border-b border-slate-200">
+              <th class="py-2 pr-3">Date</th>
+              <th class="py-2 pr-3">Type</th>
+              <th class="py-2 pr-3">Description</th>
+              <th class="py-2 pr-3">Amount</th>
+            </tr>
+          </thead>
+          <tbody id="reportTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="reportEmptyState" class="text-slate-400 text-sm italic px-1">Pick your name above to see your payment history and match deductions.</div>
+  </section>
+
+  <!-- ---------- MATCH REPORTS ---------- -->
+  <section id="view-matches" class="hidden fade-in">
+    <h1 class="font-display text-2xl text-pitch mb-5">Match Reports</h1>
+    <div id="matchesList" class="flex flex-col gap-4"></div>
+  </section>
+
+  <!-- ---------- ADMIN PANEL ---------- -->
+  <section id="view-admin" class="hidden fade-in">
+    <div class="flex items-center justify-between mb-5">
+      <h1 class="font-display text-2xl text-pitch">Admin Panel</h1>
+      <button id="logoutBtn" class="text-sm font-display text-[--ball-red] border border-[--ball-red] rounded-full px-4 py-1.5 hover:bg-red-50">Log Out</button>
+    </div>
+
+    <div class="flex gap-2 mb-5 border-b border-slate-200 font-display text-sm">
+      <button data-admintab="squadmgmt" class="admin-tab px-4 py-2 border-b-2 border-pitch text-pitch">Squad Management</button>
+      <button data-admintab="payments" class="admin-tab px-4 py-2 border-b-2 border-transparent text-slate-500">Payments</button>
+      <button data-admintab="logistics" class="admin-tab px-4 py-2 border-b-2 border-transparent text-slate-500">Match Logistics</button>
+    </div>
+
+    <!-- Squad Management -->
+    <div id="admin-squadmgmt" class="admin-panel">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <form id="playerForm" class="card p-5 lg:col-span-1 h-fit">
+          <fieldset id="playerFormFieldset">
+            <h2 class="font-display text-lg text-pitch mb-3" id="playerFormTitle">Add Player</h2>
+            <input type="hidden" id="playerFormId">
+            <label class="block text-xs font-display uppercase tracking-wider text-slate-500 mb-1">Full Name</label>
+            <input required id="playerFormName" type="text" placeholder="e.g. Suresh Kumar" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3">
+            <label class="block text-xs font-display uppercase tracking-wider text-slate-500 mb-1">Contact Number</label>
+            <input required id="playerFormContact" type="text" placeholder="e.g. 9876500000" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3">
+            <label class="block text-xs font-display uppercase tracking-wider text-slate-500 mb-1">Opening Balance (₹)</label>
+            <input id="playerFormBalance" type="number" step="1" placeholder="0" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-4">
+            <div class="flex gap-2">
+              <button type="submit" class="flex-1 bg-pitch hover:bg-pitch-dark text-white font-display text-sm py-2 rounded-lg transition" id="playerFormSubmitBtn">Add to Squad</button>
+              <button type="button" id="playerFormCancelBtn" class="hidden px-3 py-2 text-sm text-slate-500 border border-slate-200 rounded-lg">Cancel</button>
+            </div>
+          </fieldset>
+        </form>
+        <div class="card p-5 lg:col-span-2">
+          <h2 class="font-display text-lg text-pitch mb-3">Current Squad</h2>
+          <div class="overflow-x-auto scrollbar-thin">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-slate-500 font-display uppercase text-xs tracking-wider border-b border-slate-200">
+                  <th class="py-2 pr-3">Player</th><th class="py-2 pr-3">Contact</th><th class="py-2 pr-3">Balance</th><th class="py-2 pr-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="adminSquadTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Payments -->
+    <div id="admin-payments" class="admin-panel hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <form id="paymentForm" class="card p-5 lg:col-span-1 h-fit">
+          <fieldset id="paymentFormFieldset">
+            <h2 class="font-display text-lg text-pitch mb-3">Record Advance Payment</h2>
+            <label class="block text-xs font-display uppercase tracking-wider text-slate-500 mb-1">Player</label>
+            <select required id="paymentPlayerSelect" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3"></select>
+            <label class="block text-xs font-display uppercase tracking-wider text-slate-500 mb-1">Amount Paid (₹)</label>
+            <input required id="paymentAmount" type="number" min="1" placeholder="e.g. 500" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3">
+            <label class="block text-xs font-display uppercase tracking-wider text-slate-500 mb-1">Note (optional)</label>
+            <input id="paymentNote" type="text" placeholder="e.g. Monthly advance" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-4">
+            <button type="submit" class="w-full bg-pitch hover:bg-pitch-dark text-white font-display text-sm py-2 rounded-lg transition">Add Credit</button>
+          </fieldset>
+        </form>
+        <div class="card p-5 lg:col-span-2">
+          <h2 class="font-display text-lg text-pitch mb-3">Recent Ledger Entries</h2>
+          <div class="overflow-x-auto scrollbar-thin max-h-96 overflow-y-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-slate-500 font-display uppercase text-xs tracking-wider border-b border-slate-200">
+                  <th class="py-2 pr-3">Date</th><th class="py-2 pr-3">Player</th><th class="py-2 pr-3">Type</th><th class="py-2 pr-3">Amount</th>
+                </tr>
+              </thead>
+              <tbody id="adminLedgerTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match Logistics -->
+    <div id="admin-logistics" class="admin-panel hidden">
+      <form id="matchForm" class="card p-5">
+        <fieldset id="matchFormFieldset">
+          <h2 class="font-display text-lg text-pitch mb-3">Log New Match & Deduct Fees</h2>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <div>
+              <label class="block text-xs font-display uppercase tracking-wider text-slate-500 mb-1">Match Date</label>
+              <input required id="matchDate" type="date" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-display uppercase tracking-wider text-slate-500 mb-1">Opponent</label>
+              <input required id="matchOpponent" type="text" placeholder="e.g. Riverside CC" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-display uppercase tracking-wider text-slate-500 mb-1">Match Fee per Player (₹)</label>
+              <input required id="matchFee" type="number" min="0" placeholder="e.g. 300" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+            </div>
+          </div>
+          <label class="block text-xs font-display uppercase tracking-wider text-slate-500 mb-2">Mark Players Present (fee auto-deducted)</label>
+          <div id="matchPresentChecklist" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 mb-4"></div>
+          <button type="submit" class="bg-gold hover:bg-gold-dark text-pitch-dark font-display text-sm px-5 py-2.5 rounded-lg transition">Log Match & Deduct Fees</button>
+        </fieldset>
+      </form>
+    </div>
+  </section>
+
+</main>
+
+<footer class="bg-navy text-slate-300 text-center py-4 text-xs">
+  <p>Wicketkeeper Club Ledger · Live data synced to a shared Google Sheet</p>
+</footer>
+
+<!-- ============ ADMIN LOGIN MODAL ============ -->
+<div id="loginModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
+  <div class="card p-6 w-full max-w-sm">
+    <h2 class="font-display text-xl text-pitch mb-1">Admin Access</h2>
+    <p class="text-sm text-slate-500 mb-4">Enter the team manager password to continue.</p>
+    <form id="loginForm">
+      <input id="loginPasswordInput" type="password" placeholder="Password" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-2" autocomplete="off">
+      <p id="loginError" class="hidden text-xs text-[--ball-red] mb-2">Incorrect password. Try again.</p>
+      <div class="flex gap-2 mt-3">
+        <button type="submit" class="flex-1 bg-pitch hover:bg-pitch-dark text-white font-display text-sm py-2 rounded-lg transition">Unlock</button>
+        <button type="button" id="loginCancelBtn" class="px-4 py-2 text-sm text-slate-500 border border-slate-200 rounded-lg">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ TOAST ============ -->
+<div id="toast" class="hidden fixed bottom-5 left-1/2 -translate-x-1/2 bg-pitch-dark text-white text-sm font-display px-5 py-2.5 rounded-full shadow-xl z-50"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  // =====================================================================
+  // CONFIG — paste your deployed Google Apps Script Web App URL below.
+  // See the setup guide provided alongside this file for how to create it.
+  // =====================================================================
+  var APPS_SCRIPT_URL = "PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE";
+  var POLL_INTERVAL_MS = 15000; // how often public views refresh from the sheet
+  // =====================================================================
+
+  var ADMIN_PASSWORD = "admin123";
+  var isAdmin = false;
+  var currentView = "dashboard";
+  var editingPlayerId = null;
+  var pollTimer = null;
+  var isConfigured = APPS_SCRIPT_URL.indexOf("PASTE_YOUR") === -1 && APPS_SCRIPT_URL.trim() !== "";
+
+  var state = { players: [], matches: [], ledger: [] };
+
+  // ---------- server I/O ----------
+  function buildUrl(params){
+    var url = APPS_SCRIPT_URL;
+    var query = Object.keys(params).map(function(k){ return encodeURIComponent(k) + "=" + encodeURIComponent(params[k]); }).join("&");
+    return url + (url.indexOf("?") === -1 ? "?" : "&") + query;
+  }
+
+  function fetchServerData(){
+    return fetch(buildUrl({ action: "getData", t: Date.now() }), { method: "GET" })
+      .then(function(res){
+        if(!res.ok) throw new Error("Network error (" + res.status + ")");
+        return res.json();
+      })
+      .then(function(json){
+        if(json && json.error) throw new Error(json.error);
+        return json;
+      });
+  }
+
+  function pushServerData(){
+    var payload = { action: "saveData", data: { players: state.players, matches: state.matches, ledger: state.ledger } };
+    // Sent as text/plain to avoid a CORS preflight request, which Apps Script web apps don't handle.
+    return fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    })
+      .then(function(res){
+        if(!res.ok) throw new Error("Network error (" + res.status + ")");
+        return res.json();
+      })
+      .then(function(json){
+        if(json && json.error) throw new Error(json.error);
+        return json;
+      });
+  }
+
+  // ---------- connection status UI ----------
+  function setConnStatus(status, label){
+    var dot = document.getElementById("connDot");
+    var dotM = document.getElementById("connDotMobile");
+    var lbl = document.getElementById("connLabel");
+    var lblM = document.getElementById("connLabelMobile");
+    var colorClass = status === "online" ? "bg-emerald-400" : status === "saving" ? "bg-gold pulse" : status === "offline" ? "bg-red-500" : "bg-slate-400 pulse";
+    [dot, dotM].forEach(function(d){ d.className = "w-2 h-2 rounded-full " + colorClass; });
+    var text = label || (status === "online" ? "Live" : status === "saving" ? "Saving…" : status === "offline" ? "Offline" : "Connecting…");
+    lbl.textContent = text;
+    lblM.textContent = text;
+  }
+
+  function showToast(msg){
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.remove("hidden");
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer = setTimeout(function(){ t.classList.add("hidden"); }, 2600);
+  }
+
+  // ---------- load / save orchestration ----------
+  function initialLoad(){
+    if(!isConfigured){
+      document.getElementById("setupBanner").classList.remove("hidden");
+      document.getElementById("loadingError").textContent = "No Google Apps Script URL is configured yet. Add it to APPS_SCRIPT_URL in the code, redeploy this file, and tap Retry.";
+      document.getElementById("loadingError").classList.remove("hidden");
+      document.getElementById("loadingRetryBtn").classList.remove("hidden");
+      setConnStatus("offline");
+      return;
+    }
+    setConnStatus("connecting", "Connecting…");
+    fetchServerData().then(function(data){
+      state.players = data.players || [];
+      state.matches = data.matches || [];
+      state.ledger = data.ledger || [];
+      document.getElementById("loadingOverlay").classList.add("hidden");
+      setConnStatus("online");
+      switchView("dashboard");
+      startPolling();
+    }).catch(function(err){
+      console.error(err);
+      document.getElementById("loadingError").textContent = "Couldn't reach the Google Sheet (" + err.message + "). Check the Apps Script deployment and your connection, then retry.";
+      document.getElementById("loadingError").classList.remove("hidden");
+      document.getElementById("loadingRetryBtn").classList.remove("hidden");
+      setConnStatus("offline");
+    });
+  }
+
+  function refreshFromServer(silent){
+    if(!isConfigured) return Promise.resolve();
+    return fetchServerData().then(function(data){
+      state.players = data.players || [];
+      state.matches = data.matches || [];
+      state.ledger = data.ledger || [];
+      setConnStatus("online");
+      renderCurrentView();
+    }).catch(function(err){
+      console.error(err);
+      setConnStatus("offline");
+      if(!silent) showToast("Couldn't refresh from the sheet — check your connection.");
+    });
+  }
+
+  function startPolling(){
+    if(pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(function(){
+      // Pause auto-refresh while an admin is actively editing forms, so we
+      // don't wipe out an in-progress attendance checklist or form entry.
+      if(currentView === "admin") return;
+      refreshFromServer(true);
+    }, POLL_INTERVAL_MS);
+  }
+
+  function saveAndSync(successMsg, formFieldsetIds){
+    setConnStatus("saving");
+    (formFieldsetIds || []).forEach(function(id){ var el = document.getElementById(id); if(el) el.disabled = true; });
+    return pushServerData().then(function(){
+      setConnStatus("online");
+      if(successMsg) showToast(successMsg);
+      return true;
+    }).catch(function(err){
+      console.error(err);
+      setConnStatus("offline");
+      showToast("Couldn't save to the sheet — check your connection and try again.");
+      return false;
+    }).then(function(ok){
+      (formFieldsetIds || []).forEach(function(id){ var el = document.getElementById(id); if(el) el.disabled = false; });
+      return ok;
+    });
+  }
+
+  // ---------- helpers ----------
+  function fmtINR(n){
+    n = Number(n) || 0;
+    var neg = n < 0;
+    var formatted = Math.abs(n).toLocaleString("en-IN", {maximumFractionDigits:0});
+    return (neg ? "-₹" : "₹") + formatted;
+  }
+  function fmtDate(d){
+    if(!d) return "";
+    var dt = new Date(d + "T00:00:00");
+    if(isNaN(dt.getTime())) return d;
+    return dt.toLocaleDateString("en-IN", {day:"numeric", month:"short", year:"numeric"});
+  }
+  function dayFromDate(d){
+    var dt = new Date(d + "T00:00:00");
+    if(isNaN(dt.getTime())) return "";
+    return dt.toLocaleDateString("en-IN", {weekday:"long"});
+  }
+  function uid(prefix){
+    return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  }
+  function getPlayer(id){
+    return state.players.find(function(p){ return p.id === id; });
+  }
+  function statusBadge(balance){
+    if(balance > 0){
+      return '<span class="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-display px-2.5 py-1 rounded-full">Paid Up</span>';
+    } else if(balance === 0){
+      return '<span class="inline-flex items-center gap-1 bg-slate-50 text-slate-500 border border-slate-200 text-xs font-display px-2.5 py-1 rounded-full">Settled</span>';
+    } else {
+      return '<span class="inline-flex items-center gap-1 bg-red-50 text-[--ball-red] border border-red-200 text-xs font-display px-2.5 py-1 rounded-full">Low Balance</span>';
+    }
+  }
+  function balanceClass(balance){
+    if(balance > 0) return "text-emerald-700";
+    if(balance === 0) return "text-slate-500";
+    return "text-[--ball-red]";
+  }
+  function initials(name){
+    return name.split(" ").filter(Boolean).slice(0,2).map(function(w){return w[0];}).join("").toUpperCase();
+  }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  // ---------- view switching ----------
+  function switchView(view){
+    if(view === "admin" && !isAdmin){
+      openLoginModal();
+      return;
+    }
+    currentView = view;
+    ["dashboard","squad","myreport","matches","admin"].forEach(function(v){
+      var el = document.getElementById("view-" + v);
+      if(v === view){ el.classList.remove("hidden"); }
+      else { el.classList.add("hidden"); }
+    });
+    document.querySelectorAll(".nav-btn").forEach(function(btn){
+      if(btn.dataset.view === view){
+        btn.classList.remove("tab-inactive");
+        btn.classList.add("tab-active");
+      } else {
+        btn.classList.remove("tab-active");
+        btn.classList.add("tab-inactive");
+      }
+    });
+    document.getElementById("mobileNav").classList.add("hidden");
+    if(view === "admin"){
+      // Grab the freshest copy before anyone starts editing.
+      refreshFromServer(true).then(renderAdmin);
+    } else {
+      renderCurrentView();
+    }
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+
+  function renderCurrentView(){
+    if(currentView === "dashboard") renderDashboard();
+    if(currentView === "squad") renderSquad();
+    if(currentView === "myreport") renderMyReportSelect();
+    if(currentView === "matches") renderMatches();
+    if(currentView === "admin") renderAdmin();
+  }
+
+  // ---------- DASHBOARD ----------
+  function renderDashboard(){
+    var totalFunds = state.players.reduce(function(sum,p){ return sum + p.balance; }, 0);
+    var lowCount = state.players.filter(function(p){ return p.balance < 0; }).length;
+    document.getElementById("statTotalFunds").textContent = fmtINR(totalFunds);
+    document.getElementById("statPlayerCount").textContent = state.players.length;
+    document.getElementById("statLowBalance").textContent = lowCount;
+    document.getElementById("todayTag").textContent = new Date().toLocaleDateString("en-IN", {weekday:"long", day:"numeric", month:"long", year:"numeric"});
+
+    renderDashboardTable(document.getElementById("dashSearch").value || "");
+  }
+  function renderDashboardTable(filter){
+    var tbody = document.getElementById("dashboardTableBody");
+    var f = filter.trim().toLowerCase();
+    var rows = state.players
+      .filter(function(p){ return p.name.toLowerCase().indexOf(f) !== -1; })
+      .slice().sort(function(a,b){ return a.name.localeCompare(b.name); })
+      .map(function(p){
+        return '<tr class="border-b border-slate-100 hover:bg-slate-50">' +
+          '<td class="py-2.5 pr-3 font-medium">'+escapeHtml(p.name)+'</td>' +
+          '<td class="py-2.5 pr-3 text-slate-500 font-mono text-xs">'+escapeHtml(p.contact)+'</td>' +
+          '<td class="py-2.5 pr-3 font-mono '+balanceClass(p.balance)+'">'+fmtINR(p.balance)+'</td>' +
+          '<td class="py-2.5 pr-3">'+statusBadge(p.balance)+'</td>' +
+          '</tr>';
+      }).join("");
+    var emptyMsg = state.players.length === 0
+      ? "No players yet. Add your first player from the Admin Panel."
+      : "No players match your search.";
+    tbody.innerHTML = rows || '<tr><td colspan="4" class="py-6 text-center text-slate-400 italic">'+emptyMsg+'</td></tr>';
+  }
+
+  // ---------- SQUAD DIRECTORY ----------
+  function renderSquad(){
+    document.getElementById("squadCountTag").textContent = state.players.length + " players registered";
+    var grid = document.getElementById("squadGrid");
+    grid.innerHTML = state.players
+      .slice().sort(function(a,b){ return a.name.localeCompare(b.name); })
+      .map(function(p){
+        return '<div class="card p-5 flex items-start gap-4">' +
+          '<div class="w-12 h-12 rounded-full bg-pitch text-gold font-display text-lg flex items-center justify-center shrink-0">'+initials(p.name)+'</div>' +
+          '<div class="flex-1 min-w-0">' +
+            '<p class="font-display text-base text-pitch truncate">'+escapeHtml(p.name)+'</p>' +
+            '<p class="text-xs text-slate-500 font-mono mt-0.5">'+escapeHtml(p.contact)+'</p>' +
+            '<div class="flex items-center justify-between mt-3">' +
+              '<span class="font-mono text-sm '+balanceClass(p.balance)+'">'+fmtINR(p.balance)+'</span>' +
+              statusBadge(p.balance) +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }).join("") || '<p class="text-slate-400 italic">No players registered yet.</p>';
+  }
+
+  // ---------- MY LEDGER ----------
+  function renderMyReportSelect(){
+    var sel = document.getElementById("reportPlayerSelect");
+    var current = sel.value;
+    sel.innerHTML = '<option value="">— Choose your name —</option>' +
+      state.players.slice().sort(function(a,b){return a.name.localeCompare(b.name);}).map(function(p){
+        return '<option value="'+p.id+'">'+escapeHtml(p.name)+'</option>';
+      }).join("");
+    if(current){ sel.value = current; }
+    renderMyReport();
+  }
+  function renderMyReport(){
+    var id = document.getElementById("reportPlayerSelect").value;
+    var summary = document.getElementById("reportSummary");
+    var wrap = document.getElementById("reportHistoryWrap");
+    var empty = document.getElementById("reportEmptyState");
+    if(!id){
+      summary.classList.add("hidden");
+      wrap.classList.add("hidden");
+      empty.classList.remove("hidden");
+      return;
+    }
+    var player = getPlayer(id);
+    if(!player){ return; }
+    summary.classList.remove("hidden");
+    wrap.classList.remove("hidden");
+    empty.classList.add("hidden");
+
+    var entries = state.ledger.filter(function(l){ return l.playerId === id; })
+      .slice().sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
+    var paid = entries.filter(function(l){return l.amount > 0;}).reduce(function(s,l){return s+l.amount;},0);
+    var deducted = entries.filter(function(l){return l.amount < 0;}).reduce(function(s,l){return s+Math.abs(l.amount);},0);
+
+    document.getElementById("repPaid").textContent = fmtINR(paid);
+    document.getElementById("repDeducted").textContent = fmtINR(deducted);
+    var repBal = document.getElementById("repBalance");
+    repBal.textContent = fmtINR(player.balance);
+    repBal.className = "text-2xl font-display mt-1 " + balanceClass(player.balance);
+
+    var tbody = document.getElementById("reportTableBody");
+    tbody.innerHTML = entries.map(function(l){
+      var typeColor = l.type === "Advance Paid" ? "text-emerald-700 bg-emerald-50 border-emerald-200" : "text-[--ball-red] bg-red-50 border-red-200";
+      return '<tr class="border-b border-slate-100">' +
+        '<td class="py-2.5 pr-3 font-mono text-xs text-slate-500">'+fmtDate(l.date)+'</td>' +
+        '<td class="py-2.5 pr-3"><span class="text-xs font-display px-2 py-1 rounded-full border '+typeColor+'">'+l.type+'</span></td>' +
+        '<td class="py-2.5 pr-3 text-slate-600">'+escapeHtml(l.description)+'</td>' +
+        '<td class="py-2.5 pr-3 font-mono '+(l.amount>0?"text-emerald-700":"text-[--ball-red]")+'">'+(l.amount>0?"+":"")+fmtINR(l.amount)+'</td>' +
+        '</tr>';
+    }).join("") || '<tr><td colspan="4" class="py-6 text-center text-slate-400 italic">No transactions yet.</td></tr>';
+  }
+
+  // ---------- MATCH REPORTS ----------
+  function renderMatches(){
+    var list = document.getElementById("matchesList");
+    var sorted = state.matches.slice().sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
+    list.innerHTML = sorted.map(function(m){
+      var tags = m.present.map(function(pid){
+        var p = getPlayer(pid);
+        var label = p ? p.name : "Unknown Player";
+        return '<span class="inline-block bg-pitch/5 border border-pitch/20 text-pitch text-xs font-display px-2.5 py-1 rounded-full">'+escapeHtml(label)+'</span>';
+      }).join(" ");
+      var deleteBtn = isAdmin
+        ? '<button data-delete-match="'+m.id+'" class="text-xs font-display text-[--ball-red] border border-[--ball-red]/40 rounded-full px-3 py-1 hover:bg-red-50 shrink-0">Delete</button>'
+        : '';
+      return '<div class="card p-5">' +
+        '<div class="flex flex-wrap items-center justify-between gap-2 mb-3">' +
+          '<div>' +
+            '<p class="font-display text-lg text-pitch">vs '+escapeHtml(m.opponent)+'</p>' +
+            '<p class="text-xs text-slate-500 font-mono">'+fmtDate(m.date)+' · '+(m.day||dayFromDate(m.date))+'</p>' +
+          '</div>' +
+          '<div class="flex items-center gap-2">' +
+            '<span class="font-mono text-sm bg-gold/15 text-gold-dark border border-gold/40 px-3 py-1 rounded-full">Fee: '+fmtINR(m.fee)+'</span>' +
+            deleteBtn +
+          '</div>' +
+        '</div>' +
+        '<p class="text-xs font-display uppercase tracking-wider text-slate-500 mb-2">Players Present ('+m.present.length+')</p>' +
+        '<div class="flex flex-wrap gap-2">'+ (tags || '<span class="text-sm text-slate-400 italic">No attendance recorded</span>') +'</div>' +
+      '</div>';
+    }).join("") || '<p class="text-slate-400 italic">No matches logged yet.</p>';
+  }
+
+  // ---------- ADMIN ----------
+  function renderAdmin(){
+    renderAdminSquadTable();
+    renderAdminPaymentSelect();
+    renderAdminLedgerTable();
+    renderMatchChecklist();
+  }
+  function renderAdminSquadTable(){
+    var tbody = document.getElementById("adminSquadTableBody");
+    tbody.innerHTML = state.players.slice().sort(function(a,b){return a.name.localeCompare(b.name);}).map(function(p){
+      return '<tr class="border-b border-slate-100">' +
+        '<td class="py-2.5 pr-3 font-medium">'+escapeHtml(p.name)+'</td>' +
+        '<td class="py-2.5 pr-3 font-mono text-xs text-slate-500">'+escapeHtml(p.contact)+'</td>' +
+        '<td class="py-2.5 pr-3 font-mono '+balanceClass(p.balance)+'">'+fmtINR(p.balance)+'</td>' +
+        '<td class="py-2.5 pr-3">' +
+          '<button data-edit="'+p.id+'" class="text-xs font-display text-pitch border border-pitch/30 rounded-full px-3 py-1 mr-1.5 hover:bg-pitch/5">Edit</button>' +
+          '<button data-remove="'+p.id+'" class="text-xs font-display text-[--ball-red] border border-[--ball-red]/40 rounded-full px-3 py-1 hover:bg-red-50">Remove</button>' +
+        '</td>' +
+      '</tr>';
+    }).join("") || '<tr><td colspan="4" class="py-6 text-center text-slate-400 italic">Squad is empty.</td></tr>';
+  }
+  function renderAdminPaymentSelect(){
+    var sel = document.getElementById("paymentPlayerSelect");
+    var current = sel.value;
+    sel.innerHTML = state.players.slice().sort(function(a,b){return a.name.localeCompare(b.name);}).map(function(p){
+      return '<option value="'+p.id+'">'+escapeHtml(p.name)+' ('+fmtINR(p.balance)+')</option>';
+    }).join("") || '<option value="">No players</option>';
+    if(current){ sel.value = current; }
+  }
+  function renderAdminLedgerTable(){
+    var tbody = document.getElementById("adminLedgerTableBody");
+    var entries = state.ledger.slice().sort(function(a,b){ return new Date(b.date) - new Date(a.date); }).slice(0, 30);
+    tbody.innerHTML = entries.map(function(l){
+      return '<tr class="border-b border-slate-100">' +
+        '<td class="py-2 pr-3 font-mono text-xs text-slate-500">'+fmtDate(l.date)+'</td>' +
+        '<td class="py-2 pr-3">'+escapeHtml(l.playerName)+'</td>' +
+        '<td class="py-2 pr-3 text-xs">'+l.type+'</td>' +
+        '<td class="py-2 pr-3 font-mono '+(l.amount>0?"text-emerald-700":"text-[--ball-red]")+'">'+(l.amount>0?"+":"")+fmtINR(l.amount)+'</td>' +
+      '</tr>';
+    }).join("") || '<tr><td colspan="4" class="py-6 text-center text-slate-400 italic">No transactions yet.</td></tr>';
+  }
+  function renderMatchChecklist(){
+    var wrap = document.getElementById("matchPresentChecklist");
+    wrap.innerHTML = state.players.slice().sort(function(a,b){return a.name.localeCompare(b.name);}).map(function(p){
+      return '<label class="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2 text-sm cursor-pointer hover:bg-slate-50">' +
+        '<input type="checkbox" value="'+p.id+'" class="match-present-checkbox accent-[--pitch]"> ' + escapeHtml(p.name) +
+      '</label>';
+    }).join("") || '<p class="text-slate-400 italic text-sm">No players in squad — add players first.</p>';
+  }
+
+  // ---------- ADMIN ACTIONS ----------
+  function handlePlayerFormSubmit(e){
+    e.preventDefault();
+    var name = document.getElementById("playerFormName").value.trim();
+    var contact = document.getElementById("playerFormContact").value.trim();
+    var balanceInput = document.getElementById("playerFormBalance").value;
+    if(!name || !contact){ return; }
+
+    var wasEditing = !!editingPlayerId;
+    if(editingPlayerId){
+      var p = getPlayer(editingPlayerId);
+      if(p){
+        p.name = name;
+        p.contact = contact;
+        if(balanceInput !== ""){ p.balance = Number(balanceInput); }
+        state.ledger.forEach(function(l){ if(l.playerId === p.id){ l.playerName = p.name; } });
+      }
+    } else {
+      state.players.push({
+        id: uid("p"),
+        name: name,
+        contact: contact,
+        balance: balanceInput === "" ? 0 : Number(balanceInput)
+      });
+    }
+
+    saveAndSync(wasEditing ? "Player details updated." : name + " added to the squad.", ["playerFormFieldset"]).then(function(ok){
+      if(ok){ resetPlayerForm(); renderAdmin(); }
+    });
+  }
+  function resetPlayerForm(){
+    document.getElementById("playerForm").reset();
+    document.getElementById("playerFormId").value = "";
+    document.getElementById("playerFormTitle").textContent = "Add Player";
+    document.getElementById("playerFormSubmitBtn").textContent = "Add to Squad";
+    document.getElementById("playerFormCancelBtn").classList.add("hidden");
+    editingPlayerId = null;
+  }
+  function startEditPlayer(id){
+    var p = getPlayer(id);
+    if(!p) return;
+    editingPlayerId = id;
+    document.getElementById("playerFormId").value = id;
+    document.getElementById("playerFormName").value = p.name;
+    document.getElementById("playerFormContact").value = p.contact;
+    document.getElementById("playerFormBalance").value = p.balance;
+    document.getElementById("playerFormTitle").textContent = "Edit Player";
+    document.getElementById("playerFormSubmitBtn").textContent = "Save Changes";
+    document.getElementById("playerFormCancelBtn").classList.remove("hidden");
+    document.getElementById("playerForm").scrollIntoView({behavior:"smooth", block:"center"});
+  }
+  function removePlayer(id){
+    var p = getPlayer(id);
+    if(!p) return;
+    if(!confirm('Remove "' + p.name + '" from the squad? Their ledger history will also be deleted.')) return;
+    state.players = state.players.filter(function(x){ return x.id !== id; });
+    state.ledger = state.ledger.filter(function(l){ return l.playerId !== id; });
+    state.matches.forEach(function(m){ m.present = m.present.filter(function(pid){ return pid !== id; }); });
+    saveAndSync(p.name + " removed from squad.").then(function(ok){ if(ok) renderAdmin(); });
+  }
+  function handlePaymentSubmit(e){
+    e.preventDefault();
+    var playerId = document.getElementById("paymentPlayerSelect").value;
+    var amount = Number(document.getElementById("paymentAmount").value);
+    var note = document.getElementById("paymentNote").value.trim();
+    var player = getPlayer(playerId);
+    if(!player || !amount || amount <= 0) return;
+
+    player.balance += amount;
+    state.ledger.push({
+      id: uid("l"),
+      matchId: "",
+      playerId: playerId,
+      playerName: player.name,
+      type: "Advance Paid",
+      amount: amount,
+      date: new Date().toISOString().slice(0,10),
+      description: note || "Advance payment received"
+    });
+    saveAndSync(fmtINR(amount) + " credited to " + player.name + ".", ["paymentFormFieldset"]).then(function(ok){
+      if(ok){ document.getElementById("paymentForm").reset(); renderAdmin(); }
+    });
+  }
+  function handleMatchSubmit(e){
+    e.preventDefault();
+    var date = document.getElementById("matchDate").value;
+    var opponent = document.getElementById("matchOpponent").value.trim();
+    var fee = Number(document.getElementById("matchFee").value);
+    var checked = Array.prototype.slice.call(document.querySelectorAll(".match-present-checkbox:checked")).map(function(c){ return c.value; });
+    if(!date || !opponent || fee < 0) return;
+    if(checked.length === 0){
+      if(!confirm("No players marked present. Log this match anyway with zero attendance?")) return;
+    }
+    var match = {
+      id: uid("m"),
+      date: date,
+      day: dayFromDate(date),
+      opponent: opponent,
+      fee: fee,
+      present: checked
+    };
+    state.matches.push(match);
+    checked.forEach(function(pid){
+      var player = getPlayer(pid);
+      if(!player) return;
+      player.balance -= fee;
+      state.ledger.push({
+        id: uid("l"),
+        matchId: match.id,
+        playerId: pid,
+        playerName: player.name,
+        type: "Match Fee Deduction",
+        amount: -fee,
+        date: date,
+        description: "Match vs " + opponent
+      });
+    });
+    saveAndSync("Match logged. Fees deducted for " + checked.length + " player(s).", ["matchFormFieldset"]).then(function(ok){
+      if(ok){ document.getElementById("matchForm").reset(); renderAdmin(); }
+    });
+  }
+  function deleteMatch(id){
+    var match = state.matches.find(function(m){ return m.id === id; });
+    if(!match) return;
+    if(!confirm('Delete match vs "' + match.opponent + '"? Any fees deducted for it will be refunded to those players.')) return;
+
+    var related = state.ledger.filter(function(l){ return l.matchId === id; });
+    related.forEach(function(l){
+      var p = getPlayer(l.playerId);
+      if(p){ p.balance -= l.amount; } // amount is negative, so this adds the fee back
+    });
+    state.ledger = state.ledger.filter(function(l){ return l.matchId !== id; });
+    state.matches = state.matches.filter(function(m){ return m.id !== id; });
+
+    saveAndSync('Match deleted and fees refunded to ' + match.present.length + ' player(s).').then(function(ok){
+      if(ok){ renderMatches(); if(isAdmin){ renderAdmin(); } }
+    });
+  }
+
+  // ---------- ADMIN LOGIN ----------
+  function openLoginModal(){
+    document.getElementById("loginModal").classList.remove("hidden");
+    document.getElementById("loginError").classList.add("hidden");
+    document.getElementById("loginPasswordInput").value = "";
+    setTimeout(function(){ document.getElementById("loginPasswordInput").focus(); }, 50);
+  }
+  function closeLoginModal(){
+    document.getElementById("loginModal").classList.add("hidden");
+  }
+  function handleLoginSubmit(e){
+    e.preventDefault();
+    var pw = document.getElementById("loginPasswordInput").value;
+    if(pw === ADMIN_PASSWORD){
+      isAdmin = true;
+      closeLoginModal();
+      document.getElementById("adminNavBtn").classList.remove("hidden");
+      document.getElementById("adminNavBtnMobile").classList.remove("hidden");
+      document.getElementById("manageTeamBtn").textContent = "Admin Mode ✓";
+      showToast("Welcome back, Team Manager.");
+      switchView("admin");
+    } else {
+      document.getElementById("loginError").classList.remove("hidden");
+    }
+  }
+  function handleLogout(){
+    isAdmin = false;
+    document.getElementById("adminNavBtn").classList.add("hidden");
+    document.getElementById("adminNavBtnMobile").classList.add("hidden");
+    document.getElementById("manageTeamBtn").textContent = "Manage Team";
+    showToast("Logged out of admin mode.");
+    switchView("dashboard");
+  }
+
+  // ---------- EVENT WIRING ----------
+  document.querySelectorAll(".nav-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){ switchView(btn.dataset.view); });
+  });
+  document.getElementById("manageTeamBtn").addEventListener("click", function(){
+    if(isAdmin){ switchView("admin"); } else { openLoginModal(); }
+  });
+  document.getElementById("mobileMenuBtn").addEventListener("click", function(){
+    document.getElementById("mobileNav").classList.toggle("hidden");
+  });
+  document.getElementById("loginForm").addEventListener("submit", handleLoginSubmit);
+  document.getElementById("loginCancelBtn").addEventListener("click", closeLoginModal);
+  document.getElementById("logoutBtn").addEventListener("click", handleLogout);
+  document.getElementById("dashSearch").addEventListener("input", function(e){ renderDashboardTable(e.target.value); });
+  document.getElementById("reportPlayerSelect").addEventListener("change", renderMyReport);
+  document.getElementById("playerForm").addEventListener("submit", handlePlayerFormSubmit);
+  document.getElementById("playerFormCancelBtn").addEventListener("click", resetPlayerForm);
+  document.getElementById("paymentForm").addEventListener("submit", handlePaymentSubmit);
+  document.getElementById("matchForm").addEventListener("submit", handleMatchSubmit);
+  document.getElementById("loadingRetryBtn").addEventListener("click", function(){
+    document.getElementById("loadingError").classList.add("hidden");
+    document.getElementById("loadingRetryBtn").classList.add("hidden");
+    isConfigured = APPS_SCRIPT_URL.indexOf("PASTE_YOUR") === -1 && APPS_SCRIPT_URL.trim() !== "";
+    initialLoad();
+  });
+
+  document.getElementById("matchesList").addEventListener("click", function(e){
+    var delBtn = e.target.closest("[data-delete-match]");
+    if(delBtn){ deleteMatch(delBtn.dataset.deleteMatch); }
+  });
+
+  document.getElementById("adminSquadTableBody").addEventListener("click", function(e){
+    var editBtn = e.target.closest("[data-edit]");
+    var removeBtn = e.target.closest("[data-remove]");
+    if(editBtn){ startEditPlayer(editBtn.dataset.edit); }
+    if(removeBtn){ removePlayer(removeBtn.dataset.remove); }
+  });
+
+  document.querySelectorAll(".admin-tab").forEach(function(tab){
+    tab.addEventListener("click", function(){
+      document.querySelectorAll(".admin-panel").forEach(function(p){ p.classList.add("hidden"); });
+      document.getElementById("admin-" + tab.dataset.admintab).classList.remove("hidden");
+      document.querySelectorAll(".admin-tab").forEach(function(t){
+        t.classList.remove("border-pitch","text-pitch");
+        t.classList.add("border-transparent","text-slate-500");
+      });
+      tab.classList.remove("border-transparent","text-slate-500");
+      tab.classList.add("border-pitch","text-pitch");
+    });
+  });
+
+  // close modal on backdrop click
+  document.getElementById("loginModal").addEventListener("click", function(e){
+    if(e.target === e.currentTarget) closeLoginModal();
+  });
+
+  // ---------- INIT ----------
+  document.getElementById("connStatus").classList.remove("hidden");
+  initialLoad();
+})();
+</script>
+</body>
+</html>
